@@ -84,19 +84,20 @@ jobs:
 
       - name: Setup server environment
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
+            ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
             cd ${{ secrets.DEPLOY_PATH }}
-            # Убедимся, что python3-venv установлен
+            # Обновляем пакеты и устанавливаем зависимости
             sudo apt-get update && sudo apt-get install -y python3-venv python3-dev libpq-dev
             # Создаём или обновляем venv
             python3 -m venv venv || { echo 'Failed to create venv'; exit 1; }
-            # Активируем и устанавливаем зависимости
-            . venv/bin/activate &&
-            pip install --upgrade pip &&
-            pip install -r app/requirements.txt &&
-            python manage.py migrate &&
+            # Устанавливаем зависимости
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r ${{ secrets.DEPLOY_PATH }}/app/requirements.txt
+            # Применяем миграции
+            python manage.py migrate
             python manage.py collectstatic --noinput
-          "
+            "
 
       - name: Restart service
         run: |
