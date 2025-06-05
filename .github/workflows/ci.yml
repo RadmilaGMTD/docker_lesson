@@ -79,7 +79,8 @@ jobs:
             --exclude '.github' \
             --exclude 'venv' \
             --exclude '__pycache__' \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PATH }}/
+            --no-perms --no-owner --no-group \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/var/www/your_project/
 
       - name: Setup server environment
         run: |
