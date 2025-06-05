@@ -116,3 +116,4 @@ jobs:
             sudo systemctl restart gunicorn.service
             sudo systemctl restart nginx.service
           "
+          
