@@ -66,53 +66,38 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      - name: Add server to known hosts
-        run: ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Install rsync
-        run: sudo apt-get install -y rsync
-
-      - name: Copy files
+      - name: Copy project files to server
         run: |
-          rsync -avz --delete \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude 'venv' \
-            --exclude '__pycache__' \
-            --no-perms --no-owner --no-group \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/var/www/docker_lesson/
+            rsync -avz --exclude '__pycache__' . ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_DIR }}
 
-      - name: Setup server environment
+      - name: Install dependencies on server
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
-            set -e  # Прекратить выполнение при ошибке
-            cd /var/www/docker_lesson || { echo 'Ошибка перехода в DEPLOY_DIR'; exit 1; }
-            echo 'Текущая директория: ' && pwd
-            echo 'Содержимое директории: ' && ls -la
+                ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+                  cd ${{ secrets.DEPLOY_DIR }}
+                  python3 -m venv venv
+                  source venv/bin/activate
+                  pip install -r app/requirements.txt
+                EOF
 
-            # Проверка существования ключевых файлов
-            [ ! -f 'app/requirements.txt' ] && { echo 'Файл requirements.txt не найден'; ls -la app/; exit 1; }
-            [ ! -f 'manage.py' ] && { echo 'Файл manage.py не найден'; exit 1; }
-
-            # Обновление пакетов
-            sudo apt-get update && sudo apt-get install -y python3-venv python3-dev libpq-dev
-
-            # Виртуальное окружение
-            python3 -m venv venv
-            source venv/bin/activate
-
-            # Установка зависимостей
-            pip install --upgrade pip
-            pip install -r /var/www/docker_lesson/app/requirements.txt
-
-            # Миграции
-            python /var/www/docker_lesson/manage.py migrate
-            python /var/www/docker_lesson/manage.py collectstatic --noinput
-          "
-
-      - name: Restart service
+      - name: Apply migrations on server
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
-            sudo systemctl restart gunicorn.service
-            sudo systemctl restart nginx.service
-          "
+                ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+                  cd ${{ secrets.DEPLOY_DIR }}
+                  source venv/bin/activate
+                  python manage.py migrate
+                EOF
+
+      - name: Collect static files on server
+        run: |
+                ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+                  cd ${{ secrets.DEPLOY_DIR }}
+                  source venv/bin/activate
+                  python manage.py collectstatic --noinput
+                EOF
+
+      - name: Restart application
+        run: |
+                ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+                  sudo systemctl restart myapp.service
+                EOF
