@@ -100,7 +100,7 @@ jobs:
             source venv/bin/activate
             pip install --upgrade pip
             pip install -r app/requirements.txt
-            export POSTGRES_HOST=db
+            export POSTGRES_HOST=localhost
             export POSTGRES_DB=mydatabase
             export POSTGRES_USER=myuser
             export POSTGRES_PASSWORD=mypassword
