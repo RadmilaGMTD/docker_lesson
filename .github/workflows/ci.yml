@@ -1,12 +1,10 @@
-name: Django CI
+name: Django CI/CD
 
 on: [push, pull_request]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
-
     services:
       postgres:
         image: postgres:14
@@ -19,86 +17,74 @@ jobs:
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Cache pip
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r app/requirements.txt
-
-      - name: Wait for PostgreSQL
-        run: sleep 3
+          pip install -r requirements.txt
 
       - name: Run migrations
         env:
-          POSTGRES_HOST: localhost  # Важно! В CI используем localhost
-          POSTGRES_DB: mydatabase
-          POSTGRES_USER: myuser
-          POSTGRES_PASSWORD: mypassword
-        run: python manage.py migrate
+          DATABASE_URL: postgres://myuser:mypassword@localhost:5432/mydatabase
+        run: |
+          python manage.py migrate
 
       - name: Run tests
         run: python manage.py test
+
   deploy:
     runs-on: ubuntu-latest
     needs: test
+    if: github.ref == 'refs/heads/main' # Только для main ветки
 
     steps:
+      - uses: actions/checkout@v3
+
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.SSH_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Copy project files to server
-        run: |
-          rsync -avz --no-g --no-times --exclude '__pycache__' . ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_DIR }}
+      - name: Install rsync
+        run: sudo apt-get install -y rsync
 
-      - name: Install dependencies on server
+      - name: Copy files
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            cd ${{ secrets.DEPLOY_DIR }}
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install -r requirements.txt
-          EOF
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'venv' \
+            --exclude '__pycache__' \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.DEPLOY_PATH }}/
 
-      - name: Apply migrations on server
+      - name: Setup server environment
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            cd ${{ secrets.DEPLOY_DIR }}
-            source venv/bin/activate
-            python manage.py migrate
-          EOF
-
-      - name: Collect static files on server
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            cd ${{ secrets.DEPLOY_DIR }}
-            source venv/bin/activate
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
+            cd ${{ secrets.DEPLOY_PATH }}
+            # Убедимся, что python3-venv установлен
+            sudo apt-get update && sudo apt-get install -y python3-venv python3-dev libpq-dev
+            # Создаём или обновляем venv
+            python3 -m venv venv || { echo 'Failed to create venv'; exit 1; }
+            # Активируем и устанавливаем зависимости
+            . venv/bin/activate &&
+            pip install --upgrade pip &&
+            pip install -r requirements.txt &&
+            python manage.py migrate &&
             python manage.py collectstatic --noinput
-          EOF
+          "
 
-      - name: Restart application
+      - name: Restart service
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            sudo systemctl restart myapp.service
-          EOF
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
+            sudo systemctl restart gunicorn.service
+            sudo systemctl restart nginx.service
+          "
