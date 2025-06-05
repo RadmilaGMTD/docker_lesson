@@ -93,7 +93,7 @@ jobs:
             # Устанавливаем зависимости
             source venv/bin/activate
             pip install --upgrade pip
-            pip install -r ${{ secrets.DEPLOY_PATH }}/app/requirements.txt
+            pip install -r ${{ secrets.DEPLOY_DIR }}/app/requirements.txt
             # Применяем миграции
             python manage.py migrate
             python manage.py collectstatic --noinput
