@@ -84,20 +84,31 @@ jobs:
 
       - name: Setup server environment
         run: |
-            ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
-            cd ${{ secrets.DEPLOY_DIR }}
-            # Обновляем пакеты и устанавливаем зависимости
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
+            set -e  # Прекратить выполнение при ошибке
+            cd /var/www/docker_lesson || { echo 'Ошибка перехода в DEPLOY_DIR'; exit 1; }
+            echo 'Текущая директория: ' && pwd
+            echo 'Содержимое директории: ' && ls -la
+
+            # Проверка существования ключевых файлов
+            [ ! -f 'app/requirements.txt' ] && { echo 'Файл requirements.txt не найден'; ls -la app/; exit 1; }
+            [ ! -f 'manage.py' ] && { echo 'Файл manage.py не найден'; exit 1; }
+
+            # Обновление пакетов
             sudo apt-get update && sudo apt-get install -y python3-venv python3-dev libpq-dev
-            # Создаём или обновляем venv
-            python3 -m venv venv || { echo 'Failed to create venv'; exit 1; }
-            # Устанавливаем зависимости
+
+            # Виртуальное окружение
+            python3 -m venv venv
             source venv/bin/activate
+
+            # Установка зависимостей
             pip install --upgrade pip
-            pip install -r ${{ secrets.DEPLOY_DIR }}/app/requirements.txt
-            # Применяем миграции
-            python manage.py migrate
-            python manage.py collectstatic --noinput
-            "
+            pip install -r /var/www/docker_lesson/app/requirements.txt
+
+            # Миграции
+            python /var/www/docker_lesson/manage.py migrate
+            python /var/www/docker_lesson/manage.py collectstatic --noinput
+          "
 
       - name: Restart service
         run: |
