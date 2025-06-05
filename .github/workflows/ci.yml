@@ -85,7 +85,7 @@ jobs:
       - name: Setup server environment
         run: |
             ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd ${{ secrets.DEPLOY_DIR }}
             # Обновляем пакеты и устанавливаем зависимости
             sudo apt-get update && sudo apt-get install -y python3-venv python3-dev libpq-dev
             # Создаём или обновляем venv
