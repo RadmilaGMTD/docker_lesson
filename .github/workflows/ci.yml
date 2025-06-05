@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r app/requirements.txt
 
       - name: Run migrations
         env:
@@ -77,7 +77,7 @@ jobs:
             # Активируем и устанавливаем зависимости
             . venv/bin/activate &&
             pip install --upgrade pip &&
-            pip install -r requirements.txt &&
+            pip install -r app/requirements.txt &&
             python manage.py migrate &&
             python manage.py collectstatic --noinput
           "
